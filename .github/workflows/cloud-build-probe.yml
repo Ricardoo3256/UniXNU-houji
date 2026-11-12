@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: '1.98.0'
-      LOG_DIR: ${{ runner.temp }}/houji-logs
+      LOG_DIR: out/ci-logs
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: houji-arm64-linux-probe-${{ github.run_id }}
-          path: ${{ runner.temp }}/houji-logs/
+          path: out/ci-logs/
           if-no-files-found: warn
           retention-days: 14
       - name: Summarize Linux status
@@ -131,7 +131,7 @@ jobs:
     timeout-minutes: 60
     env:
       RUSTUP_TOOLCHAIN: '1.98.0'
-      LOG_DIR: ${{ runner.temp }}/houji-logs
+      LOG_DIR: out/ci-logs
     steps:
       - uses: actions/checkout@v4
         with:
@@ -230,7 +230,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: houji-xcode-27-probe-${{ github.run_id }}
-          path: ${{ runner.temp }}/houji-logs/
+          path: out/ci-logs/
           if-no-files-found: warn
           retention-days: 14
       - name: Summarize macOS status
