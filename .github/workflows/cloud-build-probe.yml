@@ -3,7 +3,17 @@ name: Public ARM64 and Xcode 27 probes
 on:
   workflow_dispatch:
   push:
-  pull_request:
+    branches:
+      - codex/cloud-ci-probe
+    paths:
+      - .github/workflows/cloud-build-probe.yml
+      - sources.lock.json
+      - tools/check-source-tree.py
+      - tools/run-host-checks.py
+      - tools/prepare-sources.py
+      - checks/**
+      - kernel/**
+      - graphics/**
 
 permissions:
   contents: read
