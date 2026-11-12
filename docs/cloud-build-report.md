@@ -4,7 +4,7 @@
 
 ## 本轮结果与证据边界
 
-本地已创建 `.github/workflows/cloud-build-probe.yml`，目标主仓库基线 Commit 为 `99beb109d66d24d3a1780901cb8958ec3fb24b06`。Windows 上通过了 YAML 解析；**尚未推送或运行新 workflow**：本机 `git push --dry-run` 返回“Cannot prompt because user interactivity has been disabled / unable to get password”，当前无可用的 GitHub 写入凭据。因此没有本轮 `xcode-27` runner 的真实探针结果，也没有本轮 Turnip 跨平台组装结果。以下“未运行”不能写作 PASS 或 FAIL。
+本地已创建 `.github/workflows/cloud-build-probe.yml`，目标主仓库基线 Commit 为 `99beb109d66d24d3a1780901cb8958ec3fb24b06`。Windows 上通过了 YAML 解析。2026-11-12 经 GitHub CLI 网页授权，身份确认为 `Ricardoo3256`；个人公开 Fork 为 [Ricardoo3256/UniXNU-houji](https://github.com/Ricardoo3256/UniXNU-houji)，Actions API 显示已启用，针对该 Fork 的 `git push --dry-run` 成功。**截至本次修订仍未执行首次远程 push 或新 workflow**，等待用户确认推送目标和文件清单。因此没有本轮 `xcode-27` runner 的真实探针结果，也没有本轮 Turnip 跨平台组装结果。以下“未运行”不能写作 PASS 或 FAIL。
 
 可独立核查的历史基线：[主项目 GitHub Actions run 41324111854](https://github.com/lonzzi/UniXNU-houji/actions/runs/41324111854) 在**相同主仓库 Commit** 上于 2026-11-01 完成；其 `ubuntu-24.04-arm` 与 `macos-15` 两个 job 均成功，公开源码校验和对应 host suite 步骤均成功。这不是本次 `xcode-27` 探针；历史 workflow 没有记录本次要求的完整环境版本、KDK/CTF 状态，也没有执行 Turnip 组装。
 
@@ -45,8 +45,8 @@ Windows 既有 `graphics/turnip` 组装失败为 `StreamError: seeking backwards
 
 ## 后续获取真实结果的最小操作
 
-1. 用户在本机通过可信 GitHub 登录流程提供可写的仓库（例如自有 fork）；**不要发送令牌到对话**。本地分支为 `codex/cloud-ci-probe`。本轮未擅自推送到无权限的 `lonzzi/UniXNU-houji`。
-2. 推送包含 workflow 和更新后 `source-manifest.json` 的分支，等候两 job 完成；核对 run URL、Commit SHA、runner 的实际架构/版本、每步 outcome 和上传日志。
+1. 首次远程 push 前，向用户展示目标公开 Fork 和确切文件清单，取得明确确认。本地分支为 `codex/cloud-ci-probe`，`origin` 为个人 Fork，`upstream` 为原作者；不得向 `upstream` 推送。
+2. 经确认后向 `origin` 推送包含 workflow 和更新后 `source-manifest.json` 的分支，等候两 job 完成；核对 run URL、Commit SHA、runner 的实际架构/版本、每步 outcome 和上传日志。
 3. 若失败，按上表逐项分类并保存完整 traceback/编译输出；不删减检查或改测试以制造绿灯。以实测更新本报告的 NOT RUN / UNKNOWN 项和最终状态。
 
 本报告不证明 XNU 可编译、可启动、可刷入或设备兼容。
