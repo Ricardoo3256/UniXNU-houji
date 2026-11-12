@@ -1,52 +1,53 @@
-# houji 公开云端构建探针报告
+# houji 公开云端 CI 实测报告
 
-日期：2026-11-12。范围仅为公开源码、ARM64 Linux 和 Apple Silicon macOS 的环境/主机检查，以及 Mesa/Turnip 源码组装；**不执行 XNU 正式构建**，不使用手机、Apple/OEM 私有输入或设备标识。
+日期：2026-11-12。范围：公开源码完整性、ARM64 Linux 与 Apple Silicon macOS 主机检查，以及锁定 Mesa/Turnip 源码组装。**未执行 XNU 正式编译、镜像打包或手机操作**；没有将 Apple/OEM 私有输入、设备标识或凭据提交或上传。
 
-## 本轮结果与证据边界
+## 身份、仓库与运行证据
 
-本地已创建 `.github/workflows/cloud-build-probe.yml`，目标主仓库基线 Commit 为 `99beb109d66d24d3a1780901cb8958ec3fb24b06`。Windows 上通过了 YAML 解析。2026-11-12 经 GitHub CLI 网页授权，身份确认为 `Ricardoo3256`；个人公开 Fork 为 [Ricardoo3256/UniXNU-houji](https://github.com/Ricardoo3256/UniXNU-houji)，Actions API 显示已启用，针对该 Fork 的 `git push --dry-run` 成功。**截至本次修订仍未执行首次远程 push 或新 workflow**，等待用户确认推送目标和文件清单。因此没有本轮 `xcode-27` runner 的真实探针结果，也没有本轮 Turnip 跨平台组装结果。以下“未运行”不能写作 PASS 或 FAIL。
+- GitHub CLI 已通过用户浏览器授权；已确认登录账号 `Ricardoo3256`，具有本人 Fork 的管理与 Git 推送权限。公开 Fork：[Ricardoo3256/UniXNU-houji](https://github.com/Ricardoo3256/UniXNU-houji)。本地 `origin` 指向该 Fork，`upstream` 指向 `lonzzi/UniXNU-houji`；只向 `origin` 推送 `codex/cloud-ci-probe`。
+- 首次 push [Run 43237113438](https://github.com/Ricardoo3256/UniXNU-houji/actions/runs/43237113438) 在工作流解析阶段失败：job 级 `env` 使用了该位置不可用的 `${{ runner.temp }}`，**没有启动任何 runner 检查**。修正为相对日志目录后，[Run 43237396336](https://github.com/Ricardoo3256/UniXNU-houji/actions/runs/43237396336) 两作业成功；随后发现 `tee` 管道未传递左侧命令的失败码，不能仅凭该 run 的 job 结论作严格验收。
+- 已为探针、依赖准备、源码检查、host suite 和 Turnip 组装启用 Bash `set -e -o pipefail`，并对 Mac 探针管道显式核验退出码。以修正后的 [最终有效 Run 43238476789](https://github.com/Ricardoo3256/UniXNU-houji/actions/runs/43238476789) 为本报告主要证据：push Commit `8ceccee9beb7fb8485737ceddef7bfa66dae98e5`，两个 job 均为 **success**，每个检查步骤和日志上传步骤亦为 **success**。
+- 工作流仅由 `codex/cloud-ci-probe` 上指定源码/工作流路径的 push 或手动 `workflow_dispatch` 触发。纯文档与 `source-manifest.json` 更新不触发本工作流。Actions 使用只读仓库权限；日志工件保留 14 天。
 
-可独立核查的历史基线：[主项目 GitHub Actions run 41324111854](https://github.com/lonzzi/UniXNU-houji/actions/runs/41324111854) 在**相同主仓库 Commit** 上于 2026-11-01 完成；其 `ubuntu-24.04-arm` 与 `macos-15` 两个 job 均成功，公开源码校验和对应 host suite 步骤均成功。这不是本次 `xcode-27` 探针；历史 workflow 没有记录本次要求的完整环境版本、KDK/CTF 状态，也没有执行 Turnip 组装。
+## 实测结果
 
-| 项目 | 本轮新 workflow | 历史同 Commit 基线 | 说明 |
-|---|---|---|---|
-| ARM64 Linux | NOT RUN | PASS（`ubuntu-24.04-arm` job） | 新探针未推送 |
-| Apple Silicon / `xcode-27` | NOT RUN | 不适用（历史为 `macos-15`） | 实际架构、macOS、Xcode、SDK 版本均未知 |
-| source check | NOT RUN | PASS（两 job） | 新增 workflow/报告后需重建 source manifest 再跑 |
-| portable host suite | NOT RUN | PASS（历史 Linux job） | 本轮未重跑 |
-| Apple host suite | NOT RUN | PASS（历史 `macos-15` job） | 不能外推至 `xcode-27` |
-| Turnip assembly：ARM64 Linux | NOT RUN | NOT RUN | 需本轮锁定 Mesa Commit 组装 |
-| Turnip assembly：Apple Silicon | NOT RUN | NOT RUN | 同上 |
-| KDK（`xcode-27` runner） | UNKNOWN / 未探测 | UNKNOWN | 工作流只检查 `/Library/Developer/KDKs`，绝不下载 |
-| CTF 三工具（`xcode-27` runner） | UNKNOWN / 未探测 | UNKNOWN | 限定 PATH 与所选 Xcode 应用内查找 |
+| 项目 | 结果 | 证据边界 |
+|---|---|---|
+| ARM64 Linux job | **PASS** | `ubuntu-24.04-arm` 实测 `uname -m = aarch64`；Ubuntu 24.04，内核 `7.0.0-1017-azure` |
+| Apple Silicon job | **PASS** | `xcode-27` 实测 `uname -m = arm64`；不是仅依赖 runner 标签推断 |
+| source check | **PASS / PASS** | 两平台均为 `2396 source hashes; public tree contains no image/build inputs` |
+| portable host suite | **PASS** | Linux 日志明确 `PASS: portable suite completed`；不是 GPU 或实机资格测试 |
+| Apple host suite | **PASS** | Mac `--suite all` 日志明确 `PASS: all suite completed`；不是 GPU 或实机资格测试 |
+| Turnip assembly | **PASS / PASS** | 两平台均校验锁定 Mesa HEAD `85fda3b36405bcaea8bffc64aa4f2651dc90770d`，原版 `prepare-sources.py graphics/turnip` 输出 `Prepared` |
+| KDK | **MISSING（探测范围内）** | Mac `/Library/Developer/KDKs` 不存在；未搜索/下载其它私有位置 |
+| CTF 工具 | **MISSING（探测范围内）** | `ctfconvert`、`ctfmerge`、`ctfdump` 不在 PATH；所选 Xcode 应用内的有界查找无结果 |
 
-状态：**CLOUD_MAC_PARTIALLY_USABLE（暂定，仅表示公开 CI 方案已准备、历史 macOS 15 主机检查通过；`xcode-27` 可用性未实测）**。不能由 GitHub runner 镜像清单替代实际输出。GitHub 官方当前列出 `xcode-27` 为 arm64 标签，但运行时版本、KDK/CTF 是否存在必须以本 workflow 的日志为准：[runner-images 标签表](https://github.com/actions/runner-images/blob/main/README.md)、[GitHub-hosted runners 文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。
+Linux 实测：Python `3.12.16`、Ubuntu Clang `18.1.3`、Git `2.56.0`、Rust `1.98.0`。Mac 实测：macOS `27.0.1`（build `26A434`，Darwin `27.0.0`），所选 Xcode `27.1`（build `27A9275`，`/Applications/Xcode_27.1.app/Contents/Developer`），macOS SDK `27.0`、iPhoneOS SDK `27.1`，Apple Clang `21.0.0`（`clang-2100.3.34.2`）、Rust `1.98.0`。Mac 原始探针在 `actions/setup-python` 之前执行，显示系统 Python `3.15.2`；工作流随后选用 Python `3.12`，但探针日志没有打印切换后的完整补丁版本，故不声称该版本已被日志直接量到。
 
-## 工作流设计与取证
+公开日志工件（GitHub Actions artifact 的压缩包摘要，不等同其中各文件的哈希）：
 
-- 两个 job 分别锁定 `ubuntu-24.04-arm` 与 `xcode-27`；只读仓库权限，`checkout` 不保存凭据，不传递秘密。Linux 探测 `uname -a/-m`、Python、Clang、Git；Mac 探测 `uname`、`sw_vers`、Xcode、所选 Developer 目录、macOS/iPhoneOS SDK、Clang、Python、KDK 目录及 CTF 工具。Mac 上的 `find` 仅限制在所选 `/Applications/Xcode*.app` 内。
-- 使用 `actions/setup-python` 准备 Python 3.12；host suites 使用项目既有 Rust 1.98.0 要求。Linux 缺少 Clang 时才通过 apt 安装公开包；Rustup 缺失时使用官方安装入口。没有安装 KDK/SDK 私有文件、OEM 固件或 Apple 账号输入。
-- 两个 job 分别执行 `tools/check-source-tree.py`、相应的 `run-host-checks.py --suite portable/all`。从 `sources.lock.json` 读取 Mesa URL 和固定 SHA，先核验 checkout HEAD，再使用未改动的 `tools/prepare-sources.py graphics/turnip`；输出写入 runner 临时目录。
-- 每一步的 stdout/stderr 用 `tee` 留存到 runner 临时目录；`actions/upload-artifact@v4` 即使检查失败也上传日志（保留 14 天）。末尾汇总各步骤真实 outcome 并将失败反映为 job 失败，不能用 `continue-on-error` 冒充成功。
-- 工作流没有 `adb`、`fastboot`、XNU 构建、刷机命令或私有输入路径。GitHub Actions 构建日志/工件仅含公开内容。
+| 工件 | 大小 | GitHub 提供的 digest |
+|---|---:|---|
+| `houji-arm64-linux-probe-43238476789` | 6922 B | `sha256:b5535cf1a6f67bb120ac0ac12b498e6ca399aafe70ef62f3bcc477f42d06ce22` |
+| `houji-xcode-27-probe-43238476789` | 7403 B | `sha256:af4e0e700e4bcf85a433876be1615f21054866a76fd994c0bb147d4a5763229d` |
 
-## 失败分类规则（待实测）
+日志本地副本在被 Git 忽略的 `out/cloud-ci-run-43238476789/`；以 GitHub 上的 run 和工件为远程证据。两份工件分别包含环境、依赖、源码校验、host suite 与 Turnip 组装完整日志。工作流的 `continue-on-error` 只允许后续上传日志和汇总继续执行，汇总步骤逐一检查实际 outcome 并决定 job 终态；修正后的 `pipefail` 确保检查命令失败不会被 `tee` 掩盖。
 
-| 类别 | 判定依据 |
+## 失败分类与局限
+
+最终有效 run 没有检查失败；以下分类仅用于今后失败时按原始日志诊断，**不能把未发生的失败写成已发生**。
+
+| 类别 | 诊断边界 |
 |---|---|
-| MISSING_PACKAGE | 缺少 Python、Clang、Rustup/Rust 1.98、Git 等公开工具且准备步骤未能补齐 |
-| APPLE_API_FAILURE | `--suite all` 的 Foundation/Metal/IOSurface/Mach 等 Apple 接口检查在架构与工具链合格后报错 |
-| ARCHITECTURE_FAILURE | runner 实测 `uname -m` 不为 Linux `aarch64` 或 Mac `arm64` |
-| SOURCE_FAILURE | source manifest 不匹配、锁定 Mesa Commit 不可获取、补丁校验/应用失败，须以日志细分 |
-| TOOLCHAIN_VERSION_FAILURE | Xcode/SDK/Clang/Python/Rust 版本或可用性不符合项目已明确的要求 |
-| REPOSITORY_ASSUMPTION_FAILURE | `prepare-sources.py` 的 tar 流/文件模式假设等跨平台缺陷，在固定输入下复现 |
+| `MISSING_PACKAGE` | 公开 Python/Clang/Rust/Git 等工具缺失或安装失败 |
+| `APPLE_API_FAILURE` | Apple host suite 中 Foundation/Metal/IOSurface/Mach 等接口检查失败 |
+| `ARCHITECTURE_FAILURE` | `uname -m` 不为 Linux `aarch64` 或 Mac `arm64` |
+| `SOURCE_FAILURE` | source manifest、固定上游 SHA 或补丁应用失败，须继续按日志定位 |
+| `TOOLCHAIN_VERSION_FAILURE` | 实际工具链版本不满足明确的项目要求 |
+| `REPOSITORY_ASSUMPTION_FAILURE` | 固定输入下暴露归档流、路径或权限等跨平台假设问题 |
 
-Windows 既有 `graphics/turnip` 组装失败为 `StreamError: seeking backwards is not allowed`，发生于 Python tar 流解包、Patch 前。**目前只能记为 Windows 已观察失败；不能预先判定是 Windows 独有或跨平台缺陷。**本轮两个 CI job 的日志将给出对照；不修改 `prepare-sources.py`、不跳过 Patch/锁定 SHA。
+Windows 本地曾在 Turnip 组装时出现 `StreamError: seeking backwards is not allowed`。在同一锁定 Mesa SHA 下，Linux 和 Mac 均用原版脚本组装成功，说明**本轮两个云端平台没有复现该错误**；Windows 根因仍未定位，不能由此声称任意 Windows 环境都失败或云端所有情况都成功。
 
-## 后续获取真实结果的最小操作
+GitHub Actions 对 `actions/checkout@v4`、`actions/setup-python@v5`、`actions/upload-artifact@v4` 给出 Node.js 20 废弃警告，当前被 runner 强制使用 Node.js 24；不影响本次 PASS，但需在后续维护中处理。Mac 的 KDK/CTF 探测范围有限；“MISSING”表示当前公共 runner 探针未找到，不证明任何合法私有构建环境也缺失。当前 macOS/Xcode/SDK 版本也不自动满足项目历史 XNU 8796.141.3 构建要求。
 
-1. 首次远程 push 前，向用户展示目标公开 Fork 和确切文件清单，取得明确确认。本地分支为 `codex/cloud-ci-probe`，`origin` 为个人 Fork，`upstream` 为原作者；不得向 `upstream` 推送。
-2. 经确认后向 `origin` 推送包含 workflow 和更新后 `source-manifest.json` 的分支，等候两 job 完成；核对 run URL、Commit SHA、runner 的实际架构/版本、每步 outcome 和上传日志。
-3. 若失败，按上表逐项分类并保存完整 traceback/编译输出；不删减检查或改测试以制造绿灯。以实测更新本报告的 NOT RUN / UNKNOWN 项和最终状态。
-
-本报告不证明 XNU 可编译、可启动、可刷入或设备兼容。
+**状态：CLOUD_MAC_PARTIALLY_USABLE。** Apple Silicon 公共 runner 已实测可用于公开源码和 host 检查；缺少本项目正式 XNU 构建所需且合法取得/校验的 KDK、CTF 与匹配 OEM 输入，且本次没有尝试 XNU 编译。后续安排见 `docs/cloud-ci-next-steps.md`。
