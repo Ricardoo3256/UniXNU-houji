@@ -1,0 +1,236 @@
+name: Public ARM64 and Xcode 27 probes
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  arm64-linux:
+    name: ARM64 Linux public checks
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      LOG_DIR: ${{ runner.temp }}/houji-logs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.12'
+      - name: Probe Linux runner
+        id: probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          {
+            uname -a
+            uname -m
+            python3 --version
+            clang --version || true
+            git --version
+            git rev-parse HEAD
+            test "$(uname -m)" = aarch64
+          } 2>&1 | tee "$LOG_DIR/linux-probe.log"
+      - name: Prepare public host-check dependencies
+        id: deps
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          {
+            if ! command -v clang >/dev/null || ! command -v clang++ >/dev/null; then
+              sudo apt-get update
+              sudo apt-get install -y clang
+            fi
+            if ! command -v rustup >/dev/null; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+              . "$HOME/.cargo/env"
+            fi
+            rustup toolchain install 1.98.0 --profile minimal --no-self-update
+            clang --version
+            clang++ --version
+            rustc --version
+          } 2>&1 | tee "$LOG_DIR/linux-dependencies.log"
+      - name: Check public source tree
+        id: source
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          python3 tools/check-source-tree.py 2>&1 | tee "$LOG_DIR/linux-source-check.log"
+      - name: Run portable host suite
+        id: portable
+        if: always() && steps.probe.outcome == 'success' && steps.deps.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 tools/run-host-checks.py --suite portable 2>&1 | tee "$LOG_DIR/linux-portable.log"
+      - name: Assemble locked Turnip source
+        id: turnip
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          {
+            mesa_remote=$(python3 -c 'import json; print(json.load(open("sources.lock.json"))["components"]["graphics/turnip"]["repository"])')
+            mesa_sha=$(python3 -c 'import json; print(json.load(open("sources.lock.json"))["components"]["graphics/turnip"]["revision"])')
+            echo "locked remote=$mesa_remote revision=$mesa_sha"
+            git init "$RUNNER_TEMP/mesa"
+            git -C "$RUNNER_TEMP/mesa" remote add origin "$mesa_remote"
+            git -C "$RUNNER_TEMP/mesa" fetch --depth=1 --filter=blob:none origin "$mesa_sha"
+            git -C "$RUNNER_TEMP/mesa" checkout --detach "$mesa_sha"
+            test "$(git -C "$RUNNER_TEMP/mesa" rev-parse HEAD)" = "$mesa_sha"
+            python3 tools/prepare-sources.py graphics/turnip --upstream "$RUNNER_TEMP/mesa" --output "$RUNNER_TEMP/turnip"
+          } 2>&1 | tee "$LOG_DIR/linux-turnip-assembly.log"
+      - name: Save Linux logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: houji-arm64-linux-probe-${{ github.run_id }}
+          path: ${{ runner.temp }}/houji-logs/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Summarize Linux status
+        if: always()
+        shell: bash
+        run: |
+          echo "probe=${{ steps.probe.outcome }} python=${{ steps.python.outcome }} deps=${{ steps.deps.outcome }} source=${{ steps.source.outcome }} portable=${{ steps.portable.outcome }} turnip=${{ steps.turnip.outcome }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "${{ steps.probe.outcome }}" = success
+          test "${{ steps.python.outcome }}" = success
+          test "${{ steps.deps.outcome }}" = success
+          test "${{ steps.source.outcome }}" = success
+          test "${{ steps.portable.outcome }}" = success
+          test "${{ steps.turnip.outcome }}" = success
+
+  apple-silicon:
+    name: Apple Silicon Xcode 27 public checks
+    runs-on: xcode-27
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: '1.98.0'
+      LOG_DIR: ${{ runner.temp }}/houji-logs
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe Xcode 27 runner
+        id: probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          set +e
+          {
+            uname -a
+            uname -m
+            sw_vers
+            xcodebuild -version
+            xcode-select -p
+            xcrun --sdk macosx --show-sdk-path
+            xcrun --sdk iphoneos --show-sdk-path
+            clang --version
+            python3 --version
+            if test -d /Library/Developer/KDKs; then
+              ls -la /Library/Developer/KDKs
+            else
+              echo 'KDK: MISSING'
+            fi
+            for tool in ctfconvert ctfmerge ctfdump; do
+              command -v "$tool" || echo "CTF: MISSING $tool"
+            done
+            xcode_app=$(xcode-select -p 2>/dev/null | sed 's#/Contents/Developer$##')
+            if [[ "$xcode_app" == /Applications/* && -d "$xcode_app" ]]; then
+              find "$xcode_app" -type f \( -name ctfconvert -o -name ctfmerge -o -name ctfdump \) -print
+            else
+              echo 'Selected Xcode application path unavailable'
+            fi
+          } 2>&1 | tee "$LOG_DIR/macos-probe.log"
+          set -e
+          test "$(uname -m)" = arm64
+          xcodebuild -version >/dev/null
+          xcrun --sdk macosx --show-sdk-path >/dev/null
+          xcrun --sdk iphoneos --show-sdk-path >/dev/null
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.12'
+      - name: Prepare public host-check dependencies
+        id: deps
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          {
+            if ! command -v rustup >/dev/null; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+              . "$HOME/.cargo/env"
+            fi
+            rustup toolchain install 1.98.0 --profile minimal --no-self-update
+            rustc --version
+            clang --version
+          } 2>&1 | tee "$LOG_DIR/macos-dependencies.log"
+      - name: Check public source tree
+        id: source
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          python3 tools/check-source-tree.py 2>&1 | tee "$LOG_DIR/macos-source-check.log"
+      - name: Run Apple Silicon host suite
+        id: apple
+        if: always() && steps.probe.outcome == 'success' && steps.deps.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          python3 tools/run-host-checks.py --suite all 2>&1 | tee "$LOG_DIR/macos-host-all.log"
+      - name: Assemble locked Turnip source
+        id: turnip
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          mkdir -p "$LOG_DIR"
+          {
+            mesa_remote=$(python3 -c 'import json; print(json.load(open("sources.lock.json"))["components"]["graphics/turnip"]["repository"])')
+            mesa_sha=$(python3 -c 'import json; print(json.load(open("sources.lock.json"))["components"]["graphics/turnip"]["revision"])')
+            echo "locked remote=$mesa_remote revision=$mesa_sha"
+            git init "$RUNNER_TEMP/mesa"
+            git -C "$RUNNER_TEMP/mesa" remote add origin "$mesa_remote"
+            git -C "$RUNNER_TEMP/mesa" fetch --depth=1 --filter=blob:none origin "$mesa_sha"
+            git -C "$RUNNER_TEMP/mesa" checkout --detach "$mesa_sha"
+            test "$(git -C "$RUNNER_TEMP/mesa" rev-parse HEAD)" = "$mesa_sha"
+            python3 tools/prepare-sources.py graphics/turnip --upstream "$RUNNER_TEMP/mesa" --output "$RUNNER_TEMP/turnip"
+          } 2>&1 | tee "$LOG_DIR/macos-turnip-assembly.log"
+      - name: Save macOS logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: houji-xcode-27-probe-${{ github.run_id }}
+          path: ${{ runner.temp }}/houji-logs/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Summarize macOS status
+        if: always()
+        shell: bash
+        run: |
+          echo "probe=${{ steps.probe.outcome }} python=${{ steps.python.outcome }} deps=${{ steps.deps.outcome }} source=${{ steps.source.outcome }} apple=${{ steps.apple.outcome }} turnip=${{ steps.turnip.outcome }}" | tee -a "$GITHUB_STEP_SUMMARY"
+          test "${{ steps.probe.outcome }}" = success
+          test "${{ steps.python.outcome }}" = success
+          test "${{ steps.deps.outcome }}" = success
+          test "${{ steps.source.outcome }}" = success
+          test "${{ steps.apple.outcome }}" = success
+          test "${{ steps.turnip.outcome }}" = success

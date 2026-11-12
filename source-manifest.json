@@ -2,6 +2,7 @@
   "format": 1,
   "files": {
     ".gitattributes": "54463d30eaaaced13a2ae64af1df400a1db12ea5fd9f0b3dd8a4ca624bbe1628",
+    ".github/workflows/cloud-build-probe.yml": "7b8ceadba677a23679b0c8817168f7c47a269f311b8feea70c3c3d2dd227fe61",
     ".github/workflows/source-checks.yml": "3309bc10d4f5d38290cd816dac95da26e1d7378acc371da511ca6c24cb1e133a",
     ".gitignore": "5f36ab0d08524e51a8d966eee0064b1651f3c3ffe2e08ac4384c59a0dce475eb",
     "AGENTS.md": "830a6e98c687889e4262c30d77643db12e035ef5a21f4d7659f8f527dc469e10",
@@ -1500,6 +1501,7 @@
     "checks/userland-logs.py": "b110c81f71c251760f957e7df3e029080e0ab55d2b508fe3edb6a706abb9557d",
     "docs/architecture.md": "9c2de00b4278933feca81c60936c58801e5e0ba611ca7c1c65232c092ef5a02d",
     "docs/battery.md": "fb5590ccd41d19165f06c6b72c47c894b92497284be9002445f4ca0d709a1e02",
+    "docs/cloud-build-report.md": "4a37598c8b68b948a61d166c45e0e2d92d915e1fbc08eb69ff6c4e17df314f52",
     "docs/development.md": "ec019ece54592b83c16647c5f21e8f4153588d438cbbab13a0c85954394f0f9a",
     "docs/device-tests.md": "85d987ac559f9ae27f9d6b08830717c2c6cf304af0935908583da1c29d62936c",
     "docs/device-tree.md": "c15c524fab6c71155b5301dc7181f2d7113ef911b4bb625a08ee4dbe48036525",
